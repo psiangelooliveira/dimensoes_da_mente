@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AJUSTE DE FOCO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Configuração Firebase
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        let userId = null;
+        const getTodayStr = () => new Date().toISOString().split('T')[0];
+
+        // Inicialização de Autenticação e Checagem de Bloqueio
+        const initAuth = async () => {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth);
+            }
+        };
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                const lockRef = doc(db, 'artifacts', appId, 'users', userId, 'access', 'daily_lock');
+                const snap = await getDoc(lockRef);
+                
+                if (snap.exists() && snap.data().date === getTodayStr()) {
+                    window.isBlocked = true;
+                    document.getElementById('rebel-modal').classList.remove('hidden');
+                    document.getElementById('rebel-modal').classList.add('flex');
+                } else {
+                    startSessionTimer();
+                }
+            }
+        });
+
+        initAuth();
+
+        // Salvar bloqueio no Firestore
+        window.persistBlock = async () => {
+            if (!userId) return;
+            const lockRef = doc(db, 'artifacts', appId, 'users', userId, 'access', 'daily_lock');
+            await setDoc(lockRef, { date: getTodayStr() });
+        };
+
+        function startSessionTimer() {
+            setTimeout(() => {
+                if (!window.isBlocked) triggerFinalBlock();
+            }, 90000); // 1m30s
+        }
+
+        window.triggerFinalBlock = async () => {
+            if (window.isBlocked) return;
+            window.isBlocked = true;
+            await window.persistBlock();
+            
+            const overlay = document.getElementById('block-overlay');
+            overlay.classList.remove('hidden');
+            const textEl = document.getElementById('block-text');
+            const fullText = "Ajustar foco exige também ajustar tempo. Então, pausa por aqui. Amanhã você pode jogar de novo. Até mais.";
+            
+            let i = 0;
+            const type = () => {
+                if (i < fullText.length) {
+                    textEl.innerHTML += fullText.charAt(i);
+                    i++;
+                    setTimeout(type, 40);
+                }
+            };
+            type();
+        };
+    </script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'brand-dark': '#29235E',
+                        'brand-card': '#313552',
+                        'brand-gray': '#74758A',
+                        'brand-lilac': '#D8D6E8',
+                        'brand-white': '#FFFFFF',
+                        'brand-accent': '#737489',
+                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100vw; height: 100dvh; overflow: hidden; background-color: #000; display: flex; align-items: center; justify-content: center; }
+        .app-container { container-type: inline-size; background-color: #29235E; position: relative; display: flex; flex-direction: column; overflow: hidden; width: 100vw; height: 100dvh; box-shadow: 0 0 20px rgba(255,255,255,0.1); }
+        @media (min-aspect-ratio: 4/5) { .app-container { width: calc(100dvh * (4/5)); } }
+        @media (max-aspect-ratio: 4/5) { .app-container { height: calc(100vw * (5/4)); } }
+        .scale-transition { transition: transform 1.2s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        @keyframes pulse-ready { 0%, 100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 0 rgba(115, 116, 137, 0.7); } 70% { transform: translate(-50%, -50%) scale(1.1); box-shadow: 0 0 20px 10px rgba(115, 116, 137, 0); } }
+        .btn-ready { animation: pulse-ready 2s infinite ease-in-out; border-color: #D8D6E8 !important; background-color: #737489 !important; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .dropdown-base { position: absolute; top: calc(18cqw + 4cqw + 8cqw + 2cqw); z-index: 1000; width: 45cqw; display: flex; flex-direction: column; }
+        #dropdown-A { left: calc(50% - 44cqw); }
+        #dropdown-B { right: calc(50% - 44cqw); }
+        #analogy-text::after, #block-text::after { content: '|'; animation: blink 0.7s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        #block-modal-content { background-image: url('https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/refs/heads/main/images/frame%20pop%20up%20final%20(1).jpg'); background-size: cover; background-position: center; }
+        .item-disabled { opacity: 0.3; grayscale: 100%; pointer-events: none; cursor: default; }
+    </style>
+</head>
+<body class="font-sans text-brand-white">
+
+    <div id="app" class="app-container">
+        <!-- Header -->
+        <header class="w-full flex items-center justify-between px-[4cqw] py-[3cqw] shrink-0 relative z-50 bg-brand-card border-b border-brand-gray shadow-md rounded-b-lg">
+            <img src="https://psiangelooliveira.com.br/wp-content/uploads/2026/05/Psicologo-Angelo-Oliveira-logo-CTA-CRP-04-80909.png" alt="Logo" class="w-[12cqw] h-[12cqw] object-contain z-10 rounded-lg">
+            <h1 class="absolute left-0 right-0 text-center text-[4.5cqw] font-bold uppercase tracking-widest pointer-events-none">AJUSTE DE FOCO</h1>
+            <button onclick="toggleSourcesModal()" class="z-10 text-brand-gray hover:text-brand-white w-[10cqw] h-[10cqw] flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-[7cqw] w-[7cqw]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+            </button>
+        </header>
+
+        <!-- Instrução -->
+        <div class="px-[4cqw] shrink-0 z-30 relative flex justify-center mt-[4cqw]">
+            <p class="text-brand-lilac text-[3cqw] leading-snug text-center font-medium bg-brand-card/50 rounded-lg inline-block border border-brand-gray/30 px-[5cqw] py-[2cqw]">
+                Selecione dois itens e clique no botão verde<br>para avaliar o peso cognitivo.
+            </p>
+        </div>
+
+        <!-- Balança -->
+        <div class="absolute top-[calc(50%-15cqw)] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[85cqw] h-[55cqw] z-40">
+            <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[8cqw] h-[50%] bg-brand-card border-x border-t border-brand-gray rounded-t-lg shadow-lg z-10"></div>
+            <div id="scale-beam" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60cqw] h-[1.5cqw] bg-brand-gray rounded-full z-20 scale-transition origin-center">
+                <div id="wrapper-a" class="absolute left-0 top-0 flex flex-col items-center scale-transition -translate-x-1/2" style="transform-origin: top center;">
+                    <div class="w-[1cqw] h-[6cqw] bg-brand-gray rounded-full"></div>
+                    <div class="w-[28cqw] aspect-[1/1] bg-brand-card border-[1px] border-brand-gray rounded-xl shadow-xl overflow-hidden flex items-center justify-center bg-brand-dark/20">
+                        <img id="img-a" src="https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/refs/heads/main/images/frame%201.jpg" class="w-full h-full object-cover">
+                    </div>
+                </div>
+                <div id="wrapper-b" class="absolute right-0 top-0 flex flex-col items-center scale-transition translate-x-1/2" style="transform-origin: top center;">
+                    <div class="w-[1cqw] h-[6cqw] bg-brand-gray rounded-full"></div>
+                    <div class="w-[28cqw] aspect-[1/1] bg-brand-card border-[1px] border-brand-gray rounded-xl shadow-xl overflow-hidden flex items-center justify-center bg-brand-dark/20">
+                        <img id="img-b" src="https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/refs/heads/main/images/frame%202.jpg" class="w-full h-full object-cover">
+                    </div>
+                </div>
+            </div>
+            <button id="btn-check" onclick="runComparison()" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 bg-brand-accent border-[0.8cqw] border-brand-dark text-white rounded-full p-[2.5cqw] transition-all transform active:scale-95 flex items-center justify-center shadow-lg">
+                <svg class="w-[6cqw] h-[6cqw]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+            </button>
+        </div>
+
+        <!-- Seletores -->
+        <div class="absolute top-[calc(50%+22cqw)] left-1/2 -translate-x-1/2 w-[76cqw] flex justify-between z-50">
+            <div class="relative w-[35cqw]">
+                <div id="btn-toggle-a" onclick="toggleDropdown('A', event)" class="w-full bg-brand-dark border border-brand-gray rounded-lg flex items-center justify-center p-[2cqw] h-[10cqw] cursor-pointer hover:border-brand-lilac transition-colors shadow-lg">
+                    <span id="display-a" class="text-[2.5cqw] text-center font-semibold leading-tight line-clamp-2 w-full">Escolher Item</span>
+                </div>
+            </div>
+            <div class="relative w-[35cqw]">
+                <div id="btn-toggle-b" onclick="toggleDropdown('B', event)" class="w-full bg-brand-dark border border-brand-gray rounded-lg flex items-center justify-center p-[2cqw] h-[10cqw] cursor-pointer hover:border-brand-lilac transition-colors shadow-lg">
+                    <span id="display-b" class="text-[2.5cqw] text-center font-semibold leading-tight line-clamp-2 w-full">Escolher Regulação</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modais -->
+        <div id="dropdown-A" class="hidden dropdown-base bg-brand-card border border-brand-gray rounded-xl shadow-2xl flex flex-col divide-y divide-brand-gray/20 overflow-visible"></div>
+        <div id="dropdown-B" class="hidden dropdown-base bg-brand-card border border-brand-gray rounded-xl shadow-2xl flex flex-col divide-y divide-brand-gray/20 overflow-visible"></div>
+
+        <!-- Pop-ups -->
+        <div id="block-overlay" onclick="window.location.href='https://psiangelooliveira.com.br/modo-aviao/'" class="absolute inset-0 bg-black/80 z-[200] hidden flex items-center justify-center p-[5cqw]">
+            <div id="block-modal-content" class="w-[80cqw] aspect-square border border-brand-gray/30 rounded-2xl shadow-2xl flex flex-col items-center justify-center p-[8cqw] text-center relative overflow-hidden">
+                <div class="absolute inset-0 bg-black/40"></div>
+                <p id="block-text" class="relative z-10 text-white text-[4cqw] font-bold leading-relaxed mb-[6cqw]"></p>
+                <button class="relative z-10 bg-white text-brand-dark px-[8cqw] py-[3cqw] rounded-xl font-bold uppercase tracking-widest text-[3.5cqw]">FECHAR</button>
+            </div>
+        </div>
+
+        <div id="rebel-modal" onclick="window.location.href='https://psiangelooliveira.github.io/arquetipo_jung'" class="absolute inset-0 bg-black/95 z-[300] hidden flex items-center justify-center p-[10cqw]">
+            <div class="bg-brand-card border border-brand-gray p-[6cqw] rounded-2xl flex flex-col items-center shadow-2xl max-w-[80cqw]">
+                <img src="https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/refs/heads/main/images/Eva.jpg" class="w-[45cqw] aspect-square rounded-xl object-cover mb-[5cqw] border border-brand-gray">
+                <p class="text-[4.2cqw] text-center font-medium leading-snug mb-[6cqw]">Vejo que temos um rebelde aqui. Então o jogo é outro. Vem cá descobrir seu arquétipo.</p>
+                <button class="bg-brand-accent px-[10cqw] py-[3cqw] rounded-xl font-bold uppercase text-[3.5cqw]">CLIQUE AQUI</button>
+            </div>
+        </div>
+
+        <!-- Resultado -->
+        <div id="result-area" onclick="closeResult()" class="absolute inset-0 bg-black/60 backdrop-blur-md z-[110] hidden flex flex-col items-center justify-center text-center p-[8cqw]">
+            <div id="loading-state" class="flex flex-col items-center">
+                <svg class="animate-spin h-[10cqw] w-[10cqw] text-brand-lilac mb-[3cqw]" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                <span class="text-brand-lilac text-[3cqw] font-semibold tracking-wider uppercase">Processando Pesos...</span>
+            </div>
+            <div id="result-state" class="hidden bg-brand-card border border-brand-gray rounded-2xl p-[6cqw] shadow-2xl max-w-[85cqw] relative top-[10%]">
+                <div id="cat-container" class="w-[28cqw] aspect-square mx-auto mb-[4cqw] border-[0.5cqw] border-brand-gray rounded-xl overflow-hidden shadow-lg hidden">
+                    <img id="cat-img" src="" class="w-full h-full object-cover">
+                </div>
+                <h3 class="text-[5cqw] font-bold text-brand-white mb-[3cqw]">Ajustando o foco</h3>
+                <p id="analogy-text" class="text-brand-lilac text-[3.2cqw] leading-relaxed min-h-[12cqw] text-left"></p>
+                <p class="mt-[4cqw] text-brand-gray text-[2.2cqw] italic opacity-60">Toque em qualquer lugar para fechar</p>
+            </div>
+        </div>
+
+        <div class="flex-grow"></div>
+
+        <!-- Rodapé -->
+        <footer class="w-full px-[7%] pb-[4cqw] pt-[1cqw] shrink-0 z-30 relative">
+            <div class="bg-brand-card/50 border border-brand-gray/30 rounded-xl p-[2cqw] py-[2.5cqw] flex flex-col justify-center shadow-lg relative min-h-[10cqw]">
+                <div class="text-brand-gray text-[2.4cqw] leading-tight text-left pl-[2.5cqw] pr-[10cqw] w-full">
+                    <strong class="text-brand-lilac block">Esse quiz tem caráter de diversão e não substitui</strong>
+                    <strong class="text-brand-lilac block">nenhum procedimento ou avaliação clínica psicológica.</strong>
+                    <span class="block">Psicólogo Ângelo Oliveira CRP 04-80909</span>
+                </div>
+                <a href="https://psiangelooliveira.com.br/modo-aviao/" target="_self" class="absolute bottom-[2.5cqw] right-[3cqw] text-brand-gray hover:text-brand-white transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-[6cqw] w-[6cqw]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                </a>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modal Fontes -->
+    <div id="sources-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+        <div class="bg-brand-card border border-brand-gray rounded-2xl max-w-md w-full p-6 relative shadow-2xl">
+            <button onclick="toggleSourcesModal()" class="absolute top-4 right-4 text-brand-gray hover:text-brand-white"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+            <h3 class="text-xl font-bold mb-4">Fontes Confiáveis</h3>
+            <ul class="text-brand-lilac space-y-3 text-sm"><li>Beck, J. S. (2013). Terapia Cognitivo-Comportamental.</li><li>Knapp, P. (2004). Terapia Cognitivo-Comportamental na Prática.</li><li>Leahy, R. L. (2018). Técnicas de Terapia Cognitiva.</li></ul>
+        </div>
+    </div>
+
+    <script>
+        const cats = {
+            eva: { img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/refs/heads/main/images/Eva.jpg', closures: ["Essa troca de foco devolve o controle da sua rotina.", "Reenquadrar assim zera o painel de preocupações.", "Perceber isso organiza sua energia no expediente.", "Ajustar essa visão traz clareza para o dia.", "Olhar direito já equilibra o peso do turno."] },
+            bowie: { img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/refs/heads/main/images/Bowie.jpg', closures: ["Deixa isso assentar e o dia fica mais leve.", "Essa pausa no pensamento alivia o peso do turno.", "Respira isso e sente o espaço na sua mente.", "Com calma, você reconecta com o essencial.", "Essa virada suave relaxa o ritmo do corpo."] },
+            abaddon: { img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/refs/heads/main/images/Abaddon.jpg', closures: ["Muda o foco e sobra energia para o que importa.", "Troca a lente e o expediente perde o peso.", "Essa sacada te devolve o comando do dia.", "Reajusta e o banco vira só mais um trabalho.", "Com essa troca, o estresse vira fôlego novo."] }
+        };
+
+        const connectives = [
+            { text: "Para colocar a mente no eixo, lembre-se de que", cat: 'eva' },
+            { text: "Reduza o zoom desse problema:", cat: 'eva' },
+            { text: "Respira um pouco e note que", cat: 'bowie' },
+            { text: "Para equilibrar o caixa mental, perceba que", cat: 'bowie' },
+            { text: "Em vez de focar no déficit, note que", cat: 'abaddon' },
+            { text: "O fato é que", cat: 'abaddon' }
+        ];
+
+        const databaseA = [
+            { id: 'meta', nome: 'Meta do mês', peso: 10, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/1%20-%20Meta%20do%20m%C3%AAs.jpg', tcc: "A meta do mês faz você enxergar só o resultado e esquecer todo o resto." },
+            { id: 'sistema', nome: 'Sistema fora do ar', peso: 8, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/2%20-%20Sistema%20fora%20do%20ar.jpg', tcc: "Quando o sistema trava, parece que o dia saiu do seu controle." },
+            { id: 'cliente', nome: 'Cliente irritado', peso: 7, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/3%20-%20Cliente%20irritado.jpg', tcc: "O cliente irritado faz você sentir que a culpa é toda sua." },
+            { id: 'fila', nome: 'Fila do caixa', peso: 6, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/4%20-%20Fila%20do%20caixa.jpg', tcc: "A fila grande cria uma pressa que cansa mais do que ajuda." },
+            { id: 'reuniao', nome: 'Reunião de resultados', peso: 9, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/5%20-%20Reuni%C3%A3o%20de%20resultados.jpg', tcc: "A reunião faz parecer que seu valor depende só daquele número." },
+            { id: 'emails', nome: 'E-mails acumulados', peso: 5, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/E-mails%20acumulados.jpg', tcc: "Os e-mails acumulados deixam sua cabeça cheia antes mesmo de você começar." },
+            { id: 'erro', nome: 'Medo do erro', peso: 8, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/Medo%20do%20erro.jpg', tcc: "O medo do erro faz sua mente correr direto para o pior cenário." },
+            { id: 'vendas', nome: 'Pressão por vendas', peso: 9, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/Press%C3%A3o%20por%20vendas.jpg', tcc: "A pressão por vendas cobra de você um nível impossível o tempo todo." },
+            { id: 'relogio', nome: 'Relógio lento', peso: 6, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/Rel%C3%B3gio%20lento.jpg', tcc: "Olhar para o relógio toda hora faz o expediente pesar ainda mais." },
+            { id: 'cracha', nome: 'Peso do crachá', peso: 7, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/Peso%20do%20crach%C3%A1.jpg', tcc: "O crachá começa a parecer maior do que você realmente é." }
+        ];
+
+        const databaseB = [
+            { id: 'cafe', nome: 'Pausa para o café', peso: 2, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/Pausa%20para%20o%20caf%C3%A9.jpg', tcc: "o café pausa a mente e pode ser o respiro que você precisa no momento presente." },
+            { id: 'fds', nome: 'Fim de semana', peso: 8, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/Fim%20de%20semana.jpg', tcc: "o final de semana lembra que a meta agora pode ser gastar ao invés de ganhar." },
+            { id: 'salario', nome: 'Salário na conta', peso: 7, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/Sal%C3%A1rio%20na%20conta.jpg', tcc: "o salário lembra que, na prática, seu esforço teve valor." },
+            { id: 'colega', nome: 'Colega parceiro', peso: 6, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/Colega%20parceiro.jpg', tcc: "o apoio de um colega faz o dia ficar bem mais leve." },
+            { id: 'ponto', nome: 'Bater o ponto', peso: 5, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/Bater%20o%20ponto.jpg', tcc: "bater o ponto estabelece um limite saudável para a mente." },
+            { id: 'ferias', nome: 'Férias chegando', peso: 9, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/F%C3%A9rias%20chegando.jpg', tcc: "saber que as férias estão chegando é um sopro bom pro dia a dia." },
+            { id: 'elogio', nome: 'Elogio sincero', peso: 4, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/Elogio%20sincero.jpg', tcc: "um elogio pode te reconectar ao que faz bem." },
+            { id: 'respirar', nome: 'Respirar fundo', peso: 1, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/Respirar%20fundo.jpg', tcc: "respirar faz seu corpo sair do modo de alerta." },
+            { id: 'identidade', nome: 'Sua essência', peso: 10, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/Sua%20ess%C3%AAncia.jpg', tcc: "que você é coloca o cargo no tamanho certo." },
+            { id: 'cadeira', nome: 'Cadeira ergonômica', peso: 3, img: 'https://raw.githubusercontent.com/psiangelooliveira/dimensoes_da_mente/main/images/Cadeira%20ergon%C3%B4mica.jpg', tcc: "o conforto físico traz segurança imediata e reduz a tensão." }
+        ];
+
+        let playCount = 0;
+        window.isBlocked = false;
+        let currentA = null;
+        let currentB = null;
+        let usedA = [];
+        let usedB = [];
+
+        function init() {
+            populateDropdown('dropdown-A', databaseA, true);
+            populateDropdown('dropdown-B', databaseB, false);
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.dropdown-base') && !e.target.closest('[id^="btn-toggle"]')) closeDropdowns();
+            });
+        }
+
+        function populateDropdown(dropdownId, db, isA) {
+            const container = document.getElementById(dropdownId);
+            container.innerHTML = '';
+            db.forEach(item => {
+                const div = document.createElement('div');
+                const isUsed = isA ? usedA.includes(item.id) : usedB.includes(item.id);
+                div.className = `px-[3cqw] py-[2cqw] text-[3cqw] cursor-pointer hover:bg-brand-accent transition-colors text-center font-medium whitespace-nowrap ${isUsed ? 'item-disabled' : ''}`;
+                div.textContent = item.nome;
+                div.onclick = (e) => {
+                    if (isUsed || window.isBlocked) return;
+                    e.stopPropagation();
+                    if (isA) currentA = item.id; else currentB = item.id;
+                    updateSelects();
+                    closeDropdowns();
+                    checkReady();
+                };
+                container.appendChild(div);
+            });
+        }
+
+        function toggleDropdown(side, e) {
+            if (window.isBlocked) return;
+            e.stopPropagation();
+            const dropA = document.getElementById('dropdown-A');
+            const dropB = document.getElementById('dropdown-B');
+            if (side === 'A') { dropA.classList.toggle('hidden'); dropB.classList.add('hidden'); }
+            else { dropB.classList.toggle('hidden'); dropA.classList.add('hidden'); }
+        }
+
+        function closeDropdowns() {
+            document.getElementById('dropdown-A').classList.add('hidden');
+            document.getElementById('dropdown-B').classList.add('hidden');
+        }
+
+        function updateSelects() {
+            if (currentA) {
+                const item = databaseA.find(i => i.id === currentA);
+                document.getElementById('display-a').textContent = item.nome;
+                document.getElementById('img-a').src = item.img;
+            }
+            if (currentB) {
+                const item = databaseB.find(i => i.id === currentB);
+                document.getElementById('display-b').textContent = item.nome;
+                document.getElementById('img-b').src = item.img;
+            }
+            resetScale();
+        }
+
+        function checkReady() {
+            if (currentA && currentB) document.getElementById('btn-check').classList.add('btn-ready');
+        }
+
+        function runComparison() {
+            if (window.isBlocked || !currentA || !currentB) return;
+            closeDropdowns();
+            playCount++;
+            
+            const itemA = databaseA.find(i => i.id === currentA);
+            const itemB = databaseB.find(i => i.id === currentB);
+            
+            // Marcar como usados
+            usedA.push(currentA);
+            usedB.push(currentB);
+            populateDropdown('dropdown-A', databaseA, true);
+            populateDropdown('dropdown-B', databaseB, false);
+
+            const conn = connectives[Math.floor(Math.random() * connectives.length)];
+            const catData = cats[conn.cat];
+            const fullText = `"${itemA.tcc} ${conn.text} ${itemB.tcc} ${catData.closures[Math.floor(Math.random() * catData.closures.length)]}"`;
+
+            resetScale();
+            document.getElementById('result-area').classList.remove('hidden');
+            document.getElementById('loading-state').classList.remove('hidden');
+            document.getElementById('result-state').classList.add('hidden');
+
+            setTimeout(() => {
+                const angle = ((itemB.peso - itemA.peso) / 9) * 20;
+                document.getElementById('scale-beam').style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+                document.getElementById('wrapper-a').style.transform = `translateX(-50%) rotate(${-angle}deg)`;
+                document.getElementById('wrapper-b').style.transform = `translateX(50%) rotate(${-angle}deg)`;
+                document.getElementById('loading-state').classList.add('hidden');
+                document.getElementById('result-state').classList.remove('hidden');
+                document.getElementById('cat-img').src = catData.img;
+                document.getElementById('cat-container').classList.remove('hidden');
+                document.getElementById("analogy-text").innerHTML = "";
+                
+                let i = 0;
+                const typeResult = () => {
+                    if (i < fullText.length) {
+                        document.getElementById("analogy-text").innerHTML += fullText.charAt(i);
+                        i++;
+                        setTimeout(typeResult, 30);
+                    }
+                };
+                typeResult();
+            }, 2000);
+        }
+
+        function closeResult() {
+            document.getElementById('result-area').classList.add('hidden');
+            // Reseta seletores visuais
+            currentA = null; currentB = null;
+            document.getElementById('display-a').textContent = "Escolher Item";
+            document.getElementById('display-b').textContent = "Escolher Regulação";
+            document.getElementById('btn-check').classList.remove('btn-ready');
+
+            if (playCount >= 3) {
+                setTimeout(() => window.triggerFinalBlock(), 300);
+            }
+        }
+
+        function resetScale() {
+            document.getElementById('scale-beam').style.transform = `translate(-50%, -50%) rotate(0deg)`;
+            document.getElementById('wrapper-a').style.transform = `translateX(-50%) rotate(0deg)`;
+            document.getElementById('wrapper-b').style.transform = `translateX(50%) rotate(0deg)`;
+        }
+
+        function toggleSourcesModal() {
+            document.getElementById('sources-modal').classList.toggle('hidden');
+            document.getElementById('sources-modal').classList.toggle('flex');
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
